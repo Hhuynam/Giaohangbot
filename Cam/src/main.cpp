@@ -5,6 +5,7 @@
 #include <PubSubClient.h>
 #include "camera_pins.h"
 #include "esp_http_server.h"
+#include "OTA_Firmware.h"
 
 // ===== Config =====
 const char* ssid     = "TP-LINK_0F54";
@@ -234,12 +235,15 @@ void setup() {
   Serial.begin(115200);
   wifi.connect();
   cam.initCamera();
-  cam.startServer();   // mở camera server (httpd)
+  cam.startServer();   
   espNow.init();
-  http.init(&espNow);  // đăng ký thêm route /cmd vào camera server
+  http.init(&espNow);  
   mqtt.init();
+
+  OTA_Setup(ssid, password, "esp32cam");
 }
 
 void loop() {
   mqtt.loop();
+  OTA_Handle();
 }
