@@ -9,9 +9,11 @@
 #include <Fonts/FreeSans9pt7b.h>
 #include <qrcode.h>
 #include <WebServer.h>
+#include <Wire.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
 
-
-//  DISPLAY 
+//  Display 
 class Module_Display {
 public:
   const int TFT_CS  = 38;
@@ -42,14 +44,14 @@ public:
   }
 
   void showQr(const String& raw) {
-  // 1. Bỏ prefix "emvco=" nếu có
+
   String emvco = raw;
   if (emvco.startsWith("emvco=")) {
     emvco = emvco.substring(7);
   }
   emvco.trim();
 
-  // 2. Cố định version 7 (dư sức chứa cho chuỗi ~106 ký tự)
+
   QRCode qrcode;
   int version = 7;
   int bufSize = qrcode_getBufferSize(version);
@@ -65,7 +67,7 @@ public:
     return;
   }
 
-  // 3. Tính scale và offset để QR vừa màn hình, có quiet zone ≥4 modules
+
   const int minQuietModules = 4;
   int modules = qrcode.size;
   int maxScaleW = tft.width()  / (modules + 2 * minQuietModules);
@@ -76,7 +78,7 @@ public:
   int offsetX = (tft.width()  - modules * scale) / 2;
   int offsetY = (tft.height() - modules * scale) / 2;
 
-  // 4. Vẽ QR
+  // Vẽ QR
   tft.fillScreen(ST77XX_WHITE);
   for (int y = 0; y < modules; y++) {
     for (int x = 0; x < modules; x++) {
@@ -95,7 +97,59 @@ public:
 
 };
 
-//  MOTOR DRIVER 
+//  MPU6050
+class Module_Mpu6050 {
+public:
+  const int SDA_PIN = 12;
+  const int SCL_PIN = 13;
+  const uint8_t MPU_ADDR = 0x68; 
+
+  Adafruit_MPU6050 mpu;
+  unsigned long lastMillis = 0;
+  float angleZ = 0; 
+
+  void init() {
+    Wire.begin(SDA_PIN, SCL_PIN);
+    if (!mpu.begin(MPU_ADDR, &Wire)) {
+      Serial.println("[MPU6050] init failed");
+      return;
+    }
+    Serial.println("[MPU6050] init OK");
+
+    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+    mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+
+    lastMillis = millis();
+  }
+
+  void updateAngle() {
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
+
+    unsigned long now = millis();
+    float dt = (now - lastMillis) / 1000.0; 
+    lastMillis = now;
+
+
+    float degPerSec = g.gyro.z * 57.2958;
+    angleZ += degPerSec * dt;
+
+    Serial.printf("[MPU6050] angleZ=%.2f deg\n", angleZ);
+  }
+
+  void resetAngle() {
+    angleZ = 0;
+    lastMillis = millis();
+  }
+
+  bool reached90() {
+    return fabs(angleZ) >= 90.0;
+  }
+};
+
+
+//  Motor driver
 class Module_MotorDriver {
 public:
   const int ENA = 16, IN1 = 15, IN2 = 7, IN3 = 6, IN4 = 5, ENB = 4;
@@ -140,7 +194,7 @@ public:
   }
 };
 
-//  BUZZER 
+//  Buzzer
 class Module_Buzzer {
 public:
   const int buzzerPin = 17;
@@ -162,7 +216,7 @@ public:
   }
 };
 
-//  RELAY 
+//  Relay 
 class Module_Relay {
 public:
   const int relayPin = 18;
@@ -171,7 +225,7 @@ public:
   void off(){ digitalWrite(relayPin, LOW);  Serial.println("[Relay] OFF"); }
 };
 
-//  SERVO 
+//  Servo
 class Module_Servo {
 public:
   const int servoPin = 14, channel = 3, freq = 50, resolution = 14;
@@ -187,7 +241,7 @@ public:
   void off(){ writeAngle(0); }
 };
 
-//  ESP-NOW 
+//  Esp-Now
 class Module_EspNow {
 public:
   typedef void (*CmdHandler)(const String&);
@@ -197,10 +251,10 @@ public:
   void init(CmdHandler cb) {
     handler = cb;
     WiFi.mode(WIFI_STA);
-    WiFi.disconnect(); // không join AP, chỉ ESP-NOW
+    WiFi.disconnect();
     Serial.println("[WiFi] Station mode set");
 
-    uint8_t channel = 2; // ép cứng channel 2
+    uint8_t channel = 2; 
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
 
     if (esp_now_init() != ESP_OK) {
@@ -208,7 +262,7 @@ public:
       return;
     }
     esp_now_peer_info_t peerInfo = {};
-    uint8_t peerMac[6] = {0xF8, 0xB3, 0xB7, 0x7A, 0xC2, 0xF4}; // MAC của ESP32-CAM
+    uint8_t peerMac[6] = {0xF8, 0xB3, 0xB7, 0x7A, 0xC2, 0xF4}; 
     memcpy(peerInfo.peer_addr, peerMac, 6);
     peerInfo.channel = 2;
     peerInfo.encrypt = false;
@@ -232,18 +286,21 @@ public:
   }
 };
 
-//  STATIC INSTANCE 
+
+
+// Global Module 
 Module_EspNow* Module_EspNow::instance = nullptr;
 
-//  GLOBAL MODULES 
 Module_Display display;
 Module_MotorDriver driver;
 Module_Buzzer buzzer;
 Module_Relay relay;
 Module_Servo servo;
 Module_EspNow espnow;
+Module_Mpu6050 mpu;
 
-//  COMMAND HANDLER 
+
+// Command handler
 void onCommand(const String& cmdRaw) {
   String cmd = cmdRaw;
   cmd.trim();
@@ -252,41 +309,53 @@ void onCommand(const String& cmdRaw) {
     driver.setSustain(cmd.substring(8).toInt());
   } else if (cmd.startsWith("boost=")) {
     driver.setBoost(cmd.substring(6).toInt());
-  } else if (cmd.equals("forward")) {
+  } else if (cmd == "forward") {
     driver.forward();
-  } else if (cmd.equals("backward")) {
+  } else if (cmd == "backward") {
     driver.backward();
-  } else if (cmd.equals("left")) {
+  } else if (cmd == "pivot_left") {
+    mpu.resetAngle();
     driver.left();
-  } else if (cmd.equals("right")) {
-    driver.right();
-  } else if (cmd.equals("stop")) {
+    while (!mpu.reached90()) { mpu.updateAngle(); delay(10); }
     driver.stop();
-  } else if (cmd.equals("buzzer_on")) {
+    Serial.println("[Driver] Pivot LEFT 90° done");
+  } else if (cmd == "pivot_right") {
+    mpu.resetAngle();
+    driver.right();
+    while (!mpu.reached90()) { mpu.updateAngle(); delay(10); }
+    driver.stop();
+    Serial.println("[Driver] Pivot RIGHT 90° done");
+  } else if (cmd == "stop") {
+    driver.stop();
+  } else if (cmd == "buzzer_on") {
     buzzer.on();
-  } else if (cmd.equals("buzzer_off")) {
+  } else if (cmd == "buzzer_off") {
     buzzer.off();
-  } else if (cmd.equals("buzzer_beep")) {
+  } else if (cmd == "buzzer_beep") {
     buzzer.beep();
-  } else if (cmd.equals("relay_on")) {
+  } else if (cmd == "relay_on") {
     relay.on();
-  } else if (cmd.equals("relay_off")) {
+  } else if (cmd == "relay_off") {
     relay.off();
   } else if (cmd.startsWith("emvco=")) {
     String emvco = cmd.substring(cmd.indexOf('=')+1);
     emvco.trim();
     display.showQr(emvco);
-  } else if (cmd.equals("servo_on")) {
+  } else if (cmd == "servo_on") {
     servo.on();
-  } else if (cmd.equals("servo_off")) {
+  } else if (cmd == "servo_off") {
     servo.off();
+  } else if (cmd.startsWith("servo=")) {
+    int angle = cmd.substring(6).toInt();
+    servo.writeAngle(angle);
+    Serial.printf("[Servo] set angle=%d\n", angle);
   } else {
     Serial.printf("[CMD] Unknown: '%s'\n", cmd.c_str());
   }
 }
 
 
-//  SETUP & LOOP 
+//  Setup
 void setup() {
   Serial.begin(115200);
   display.init();
@@ -295,14 +364,19 @@ void setup() {
   relay.init();
   servo.init();
 
+  mpu.init();
   driver.stop();
   buzzer.off();
   relay.off();
   servo.off();
 
   espnow.init(onCommand);
-}
 
-void loop() {
-  // loop trống, ESP-NOW callback sẽ xử lý
+// Đặt tất cả off khi khởi động
+driver.stop();
+buzzer.off(); 
+relay.off();
+servo.off(); 
 }
+// Loop
+void loop() {}
