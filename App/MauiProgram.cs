@@ -9,9 +9,11 @@ public static class MauiProgram
     {
         var builder = MauiApp.CreateBuilder();
 
-        builder
-            .UseMauiApp<App>()
-            .UseBarcodeReader();
+        builder.Services.AddSingleton<AppService>();
+        builder.Services.AddTransient<AuthPage>();
+
+        builder.UseMauiApp<App>();
+        builder.UseBarcodeReader();
 
         return builder.Build();
     }

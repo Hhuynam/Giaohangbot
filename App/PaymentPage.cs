@@ -1,8 +1,9 @@
-﻿using Microsoft.Maui.Controls;
-using ZXing.Net.Maui;
-using ZXing.Net.Maui.Controls;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Maui.Controls;
 using System;
 using System.Linq;
+using ZXing.Net.Maui;
+using ZXing.Net.Maui.Controls;
 
 namespace Giaohangbot
 {
@@ -19,7 +20,13 @@ namespace Giaohangbot
         public PaymentPage(AppService.Product product)
         {
             Title = "Payment";
-            service = new AppService();
+            var config = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+            .Build();
+
+            service = new AppService(config);
+
             this.product = product;
             startTime = DateTime.Now;
 

@@ -5,9 +5,10 @@
 #include <PubSubClient.h>
 #include "camera_pins.h"
 #include "esp_http_server.h"
-#include "OTA_Firmware.h"
+#include <ArduinoOTA.h>
 
-// ===== Config =====
+
+//  Config 
 const char* ssid     = "TP-LINK_0F54";
 const char* password = "68377038";
 const char* mqtt_server = "broker.hivemq.com";
@@ -20,7 +21,7 @@ uint8_t peerMacS3[] = {0xB8, 0xF8, 0x62, 0xE2, 0x81, 0xDC};
 // handle httpd từ camera server
 extern httpd_handle_t stream_httpd;
 
-// ===== Class WifiConnection =====
+//  Class WifiConnection 
 class WifiConnection {
 public:
   void connect() {
@@ -42,7 +43,7 @@ public:
   }
 };
 
-// ===== Class WebCamServer =====
+//  Class WebCamServer 
 class WebCamServer {
 public:
   void initCamera() {
@@ -96,7 +97,7 @@ public:
   }
 };
 
-// ===== Class EspNowConnection =====
+//  Class EspNowConnection 
 class EspNowConnection {
 public:
   void init() {
@@ -134,7 +135,7 @@ private:
 };
 EspNowConnection* EspNowConnection::instance = nullptr;
 
-// ===== Class MqttConnection =====
+//  Class MqttConnection 
 class MqttConnection {
 public:
   MqttConnection(EspNowConnection* espNow) : espNow(espNow), client(espClient) {}
@@ -180,7 +181,7 @@ private:
 };
 MqttConnection* MqttConnection::instance = nullptr;
 
-// ===== Class HttpConnection =====
+//  Class HttpConnection 
 class HttpConnection {
 public:
   void init(EspNowConnection* espNow) {
@@ -223,14 +224,14 @@ private:
   }
 };
 
-// ===== Global objects =====
+//  Global objects 
 WifiConnection wifi;
 WebCamServer cam;
 EspNowConnection espNow;
 MqttConnection mqtt(&espNow);
 HttpConnection http;
 
-// ===== Setup & Loop =====
+//  Setup
 void setup() {
   Serial.begin(115200);
   wifi.connect();
@@ -240,10 +241,45 @@ void setup() {
   http.init(&espNow);  
   mqtt.init();
 
-  OTA_Setup(ssid, password, "esp32cam");
+  //  OTA Setup 
+  ArduinoOTA.setHostname("ESP32-CAM");
+  ArduinoOTA.setPassword("1234");
+
+  ArduinoOTA
+    .onStart([]() {
+      String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
+      Serial.println("Start updating " + type);
+    })
+    .onEnd([]() {
+      Serial.println("\nUpdate complete");
+    })
+    .onProgress([](unsigned int progress, unsigned int total) {
+      Serial.printf("Progress: %u%%\n", (progress / (total / 100)));
+    })
+    .onError([](ota_error_t error) {
+      Serial.printf("Error[%u]: ", error);
+      if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+      else if (error == OTA_END_ERROR) Serial.println("End Failed");
+    });
+
+  ArduinoOTA.begin();
+  Serial.println("OTA ready");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
 }
+
 
 void loop() {
   mqtt.loop();
-  OTA_Handle();
+  ArduinoOTA.handle();
+
+  static unsigned long lastPrint = 0;
+  unsigned long now = millis();
+  if (now - lastPrint >= 2000) {
+    Serial.println("da ota thanh cong nha hahaha");
+    lastPrint = now;
+  }
 }

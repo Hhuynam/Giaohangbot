@@ -1,4 +1,5 @@
-﻿using Microsoft.Maui.Controls;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Maui.Controls;
 using System.Collections.Generic;
 
 namespace Giaohangbot
@@ -11,7 +12,12 @@ namespace Giaohangbot
         {
             Title = "Người bán";
 
-            _service = new AppService();
+            var config = new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+            .Build();
+
+            _service = new AppService(config);
 
             var nameEntry = new Entry { Placeholder = "Tên sản phẩm" };
             var priceEntry = new Entry { Placeholder = "Giá sản phẩm", Keyboard = Keyboard.Numeric };

@@ -1,7 +1,7 @@
 #ifndef CAMERA_PINS_H_
 #define CAMERA_PINS_H_
 
-// Cấu hình chân cho ESP32-CAM AI Thinker
+
 #define PWDN_GPIO_NUM     32
 #define RESET_GPIO_NUM    -1
 #define XCLK_GPIO_NUM      0
@@ -20,7 +20,7 @@
 #define HREF_GPIO_NUM     23
 #define PCLK_GPIO_NUM     22
 
-// LED flash (GPIO 4 cho đèn LED trắng tích hợp)
+
 #define LED_GPIO_NUM       4
 
 #endif

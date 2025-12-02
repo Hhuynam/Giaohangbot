@@ -6,12 +6,12 @@ using MQTTnet.Client;
 using MQTTnet.Protocol;
 using Newtonsoft.Json;
 using System.Text;
+using Microsoft.Extensions.Configuration;
 
 public class AppService
 {
-
     public class Product
-    {   
+    {
         public ObjectId Id { get; set; }
         public string Cargo_Id { get; set; }
         public string Name { get; set; }
@@ -21,34 +21,55 @@ public class AppService
         public bool IsPaid { get; set; }
     }
 
+    public class Account
+    {
+        public ObjectId Id { get; set; }
+        public string Username { get; set; }
+        public string PasswordHash { get; set; }
+        public string Role { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
 
     private readonly IMongoDatabase _database;
     private readonly GridFSBucket _imageBucket;
     private readonly IMongoCollection<Product> _productCollection;
+    private readonly IMongoCollection<Account> _accountCollection;
+    private readonly IConfiguration _config;
 
-    public AppService()
+    public AppService(IConfiguration config)
     {
-        var connectionString =
-            "mongodb://hhn51023_db_user:Namha51023%4001@" +
-            "ac-11ljvhd-shard-00-00.o39loax.mongodb.net:27017," +
-            "ac-11ljvhd-shard-00-01.o39loax.mongodb.net:27017," +
-            "ac-11ljvhd-shard-00-02.o39loax.mongodb.net:27017/" +
-            "?ssl=true&replicaSet=atlas-luprks-shard-0&authSource=admin&retryWrites=true&w=majority";
+        _config = config;
 
+        var connectionString = _config["MongoDB:ConnectionString"];
+        var dbName = _config["MongoDB:DatabaseName"];
         var client = new MongoClient(connectionString);
-        _database = client.GetDatabase("giaohangbot");
+
+        _database = client.GetDatabase(dbName);
         _imageBucket = new GridFSBucket(_database);
-        _productCollection = _database.GetCollection<Product>("products_new");
+        _productCollection = _database.GetCollection<Product>(_config["MongoDB:ProductCollection"]);
+        _accountCollection = _database.GetCollection<Account>(_config["MongoDB:AccountCollection"]);
     }
 
-    // Save image to GridFS
+    // Factory async method để tạo AppService
+    public static async Task<AppService> CreateAsync()
+    {
+        using var stream = await FileSystem.OpenAppPackageFileAsync("appsettings.json");
+        using var reader = new StreamReader(stream);
+        var json = await reader.ReadToEndAsync();
+
+        var config = new ConfigurationBuilder()
+            .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)))
+            .Build();
+
+        return new AppService(config);
+    }
+
     public async Task<ObjectId> SaveImageAsync(string filePath)
     {
         using var stream = File.OpenRead(filePath);
         return await _imageBucket.UploadFromStreamAsync(Path.GetFileName(filePath), stream);
     }
 
-    // Get image from GridFS
     public async Task<byte[]> GetImageAsync(ObjectId imageId)
     {
         using var ms = new MemoryStream();
@@ -56,26 +77,21 @@ public class AppService
         return ms.ToArray();
     }
 
-    // Generate next Cargo_Id
     private async Task<string> GetNextCargoIdAsync()
     {
         var counters = _database.GetCollection<BsonDocument>("counters");
         var filter = Builders<BsonDocument>.Filter.Eq("_id", "CargoCounter");
         var update = Builders<BsonDocument>.Update.Inc("seq", 1);
-
         var options = new FindOneAndUpdateOptions<BsonDocument>
         {
             IsUpsert = true,
             ReturnDocument = ReturnDocument.After
         };
-
         var result = await counters.FindOneAndUpdateAsync(filter, update, options);
         int seq = result["seq"].AsInt32;
-
         return $"DH_{seq:D3}";
     }
 
-    // Save product
     public async Task SaveProductAsync(Product product)
     {
         product.Cargo_Id = await GetNextCargoIdAsync();
@@ -84,20 +100,17 @@ public class AppService
         await _productCollection.InsertOneAsync(product);
     }
 
-    // Get all products
     public async Task<List<Product>> GetAllProductsAsync()
     {
         return await _productCollection.Find("{}").ToListAsync();
     }
 
-    // Find product by Cargo_Id
     public async Task<Product> FindProductByCargoIdAsync(string cargoId)
     {
         var filter = Builders<Product>.Filter.Eq("Cargo_Id", cargoId);
         return await _productCollection.Find(filter).FirstOrDefaultAsync();
     }
 
-    // Update payment status
     public async Task UpdatePaymentStatusAsync(string cargoId, bool isPaid)
     {
         var filter = Builders<Product>.Filter.Eq("Cargo_Id", cargoId);
@@ -105,89 +118,99 @@ public class AppService
         await _productCollection.UpdateOneAsync(filter, update);
     }
 
-    // Hàm chỉ gọi API VietQR và trả về chuỗi QR
     public async Task<string> GenerateVietQrAsync(string cargoId, double amount)
     {
         using var client = new HttpClient();
-
         var payload = new
         {
-            accountNo = 113366668888,
-            accountName = "QUY VAC XIN PHONG CHONG COVID",
-            acqId = 970415,
+            accountNo = _config["VietQR:AccountNo"],
+            accountName = _config["VietQR:AccountName"],
+            acqId = int.Parse(_config["VietQR:AcqId"]),
             amount = amount,
             addInfo = cargoId,
             format = "text",
             template = "qr_only"
         };
-
         var json = JsonConvert.SerializeObject(payload);
         var response = await client.PostAsync(
             "https://api.vietqr.io/v2/generate",
             new StringContent(json, Encoding.UTF8, "application/json")
         );
-
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadAsStringAsync();
-
         dynamic obj = JsonConvert.DeserializeObject(result);
-        string qrCode = obj.data.qrCode;
-
-        return qrCode;
+        return obj.data.qrCode;
     }
 
-    // Hàm publish lên MQTT, gọi GenerateVietQrAsync trước
     public async Task PublishOrderToMqttAsync(Product product)
     {
-        var mqtt = new MqttService();
+        var mqtt = new MqttService(_config);
         await mqtt.ConnectAsync();
-
         string emvco = await GenerateVietQrAsync(product.Cargo_Id, product.Price);
         string payload = $"emvco={emvco}";
         await mqtt.PublishAsync(payload);
-
         await mqtt.DisconnectAsync();
-        Console.WriteLine($"[MQTT] Published EMVCo for order {product.Cargo_Id}");
     }
 
-
-    // Publish command to MQTT (servo_on / servo_off)
     public async Task PublishMqttCommandAsync(string command)
     {
-        var mqtt = new MqttService();
+        var mqtt = new MqttService(_config);
         await mqtt.ConnectAsync();
-
         await mqtt.PublishAsync(command);
-
         await mqtt.DisconnectAsync();
-        Console.WriteLine($"[MQTT] Published command: {command}");
     }
 
+    public async Task CreateAccountAsync(string username, string password, string role)
+    {
+        var account = new Account
+        {
+            Username = username,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
+            Role = role,
+            CreatedAt = DateTime.UtcNow
+        };
+        await _accountCollection.InsertOneAsync(account);
+    }
 
+    public async Task<Account> LoginAsync(string username, string password)
+    {
+        var filter = Builders<Account>.Filter.Eq(a => a.Username, username);
+        var account = await _accountCollection.Find(filter).FirstOrDefaultAsync();
+        if (account != null && BCrypt.Net.BCrypt.Verify(password, account.PasswordHash))
+        {
+            return account;
+        }
+        return null;
+    }
+
+    public bool IsAdmin(Account account)
+    {
+        return account.Role == "Admin";
+    }
 }
 
 public class MqttService
 {
     private readonly IMqttClient _client;
     private readonly MqttClientOptions _options;
+    private readonly IConfiguration _config;
 
-    private const string BrokerHost = "broker.hivemq.com";
-    private const int BrokerPort = 1883;
-    private const string DefaultClientId = "GiaohangbotApp";
-    private const string DefaultTopic = "namha/iot";
-
-    public MqttService(string clientId = DefaultClientId)
+    public MqttService(IConfiguration config, string clientId = null)
     {
+        _config = config;
         var factory = new MqttFactory();
         _client = factory.CreateMqttClient();
 
+        var brokerHost = _config["MQTT:BrokerHost"];
+        var brokerPort = int.Parse(_config["MQTT:BrokerPort"]);
+        var cid = clientId ?? _config["MQTT:ClientId"];
+
         _options = new MqttClientOptionsBuilder()
-            .WithClientId(clientId)
-            .WithTcpServer(BrokerHost, BrokerPort)
+            .WithClientId(cid)
+            .WithTcpServer(brokerHost, brokerPort)
             .WithCleanSession()
             .Build();
     }
-
 
     public bool IsConnected => _client.IsConnected;
 
@@ -201,14 +224,12 @@ public class MqttService
     {
         if (!_client.IsConnected)
             await ConnectAsync();
-
         var mqttMessage = new MqttApplicationMessageBuilder()
-            .WithTopic(DefaultTopic)
+            .WithTopic(_config["MQTT:Topic"])
             .WithPayload(Encoding.UTF8.GetBytes(message))
             .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.ExactlyOnce)
             .WithRetainFlag(false)
             .Build();
-
         await _client.PublishAsync(mqttMessage);
     }
 

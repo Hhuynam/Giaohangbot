@@ -1,4 +1,6 @@
-﻿using Microsoft.Maui.Controls;
+﻿using Microsoft.Extensions.Configuration;
+using System.IO;
+using Microsoft.Maui.Controls;
 using Microsoft.Maui.Graphics;
 using System;
 using System.Threading.Tasks;
@@ -7,6 +9,8 @@ namespace Giaohangbot
 {
     public class AdminPage : ContentPage
     {
+        private readonly IConfiguration _config;
+
         private readonly WebView _videoStream;
         private readonly Editor _logBox;
         private readonly MqttService _mqttService;
@@ -15,7 +19,12 @@ namespace Giaohangbot
         {
             Title = "Admin Control";
 
-            var streamUrl = "http://192.168.0.100/stream";
+            _config = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
+
+            var streamUrl = _config["AdminPage:StreamUrl"];
 
             _videoStream = new WebView
             {
@@ -42,7 +51,8 @@ namespace Giaohangbot
             };
 
             // Khởi tạo MQTT service
-            _mqttService = new MqttService();
+            _mqttService = new MqttService(_config);
+
 
             // Các nút điều khiển
             var forwardBtn = CreateHoverButton("Forward", "forward");
