@@ -1,0 +1,17 @@
+- Esp32Cam OTA 
+Chú ý esp32cam muốn OTA cần phân vùng partition ota/ota1 riêng, vậy cần file min_spiffs.csv - Minimal SPIFFS have OTA 190KB
+
+- Lệnh nạp OTA
+Chọn môi trường esp32cam_ota, đã config sẵn trong .ini
+pio run --target upload --environment esp32cam_ota
+
+- Lệnh upload 
+Platform io, chọn môi trường usb --environment esp32, ví dụ COM6
+pio run --target upload --environment esp32cam --upload-port COM6
+
+- Lệnh monitor
+Chỉ trên platform io, cắm usb
+pio device monitor --port COM6 --baud 115200
+
+- IP Cam cố định
+Code main.cpp đã tự cài cố định ip 

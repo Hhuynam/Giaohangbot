@@ -6,25 +6,37 @@
 #include "camera_pins.h"
 #include "esp_http_server.h"
 #include <ArduinoOTA.h>
+#include "esp_ota_ops.h"
 
 
-//  Config 
+
 const char* ssid     = "TP-LINK_0F54";
 const char* password = "68377038";
 const char* mqtt_server = "broker.hivemq.com";
 const int   mqtt_port   = 1883;
 const char* mqtt_topic  = "namha/iot";
 
-// MAC ESP32-S3 (peer)
 uint8_t peerMacS3[] = {0xB8, 0xF8, 0x62, 0xE2, 0x81, 0xDC};
 
-// handle httpd từ camera server
 extern httpd_handle_t stream_httpd;
 
-//  Class WifiConnection 
+
+IPAddress static_ip(192, 168, 0, 220);
+IPAddress gateway(192, 168, 0, 1);
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8);      
+IPAddress secondaryDNS(8, 8, 4, 4);    
+
+
 class WifiConnection {
 public:
   void connect() {
+
+
+    if (!WiFi.config(static_ip, gateway, subnet, primaryDNS, secondaryDNS)) {
+      Serial.println("Static IP config failed");
+    }
+
     WiFi.begin(ssid, password);
     WiFi.setSleep(false);
     Serial.print("WiFi connecting");
@@ -32,7 +44,7 @@ public:
       delay(500);
       Serial.print(".");
     }
-    Serial.println("\nWiFi connected");
+    Serial.println("WiFi connected");
     printInfo();
   }
 
@@ -43,7 +55,12 @@ public:
   }
 };
 
-//  Class WebCamServer 
+
+
+
+
+
+
 class WebCamServer {
 public:
   void initCamera() {
@@ -88,6 +105,7 @@ public:
     }
     sensor_t *s = esp_camera_sensor_get();
     s->set_framesize(s, FRAMESIZE_QVGA);
+    Serial.println("Camera initialized");
   }
 
   void startServer() {
@@ -97,7 +115,12 @@ public:
   }
 };
 
-//  Class EspNowConnection 
+
+
+
+
+
+
 class EspNowConnection {
 public:
   void init() {
@@ -125,7 +148,7 @@ public:
   static void onReceiveStatic(const uint8_t* mac, const uint8_t* data, int len) {
     if (!instance) return;
     String msg;
-    for (int i=0;i<len;i++) msg += (char)data[i];
+    for (int i = 0; i < len; i++) msg += (char)data[i];
     msg.trim();
     Serial.print("ESP-NOW received: "); Serial.println(msg);
   }
@@ -135,7 +158,13 @@ private:
 };
 EspNowConnection* EspNowConnection::instance = nullptr;
 
-//  Class MqttConnection 
+
+
+
+
+
+
+
 class MqttConnection {
 public:
   MqttConnection(EspNowConnection* espNow) : espNow(espNow), client(espClient) {}
@@ -181,105 +210,125 @@ private:
 };
 MqttConnection* MqttConnection::instance = nullptr;
 
-//  Class HttpConnection 
-class HttpConnection {
+
+
+
+
+
+class OtaModule {
 public:
-  void init(EspNowConnection* espNow) {
-    this->espNow = espNow;
-    if (stream_httpd) {
-      httpd_uri_t cmd_uri = {
-        .uri       = "/cmd",
-        .method    = HTTP_POST,
-        .handler   = cmd_handler,
-        .user_ctx  = this
-      };
-      httpd_register_uri_handler(stream_httpd, &cmd_uri);
-      Serial.println("[HTTP] route /cmd registered on camera server");
-    }
+  void init() {
+    printPartitionInfo();
+
+    ArduinoOTA.setHostname("ESP32-CAM");
+    ArduinoOTA.setPassword("1234");
+
+    ArduinoOTA
+      .onStart([]() { Serial.println("Start OTA update"); })
+      .onEnd([]() { Serial.println("OTA update complete"); })
+      .onProgress([](unsigned int progress, unsigned int total) {
+        Serial.printf("Progress: %u%%\n", (progress * 100) / total);
+      })
+      .onError([](ota_error_t error) {
+        Serial.printf("OTA Error[%u]\n", error);
+      });
+
+    ArduinoOTA.begin();
+    Serial.println("OTA ready");
+  }
+
+  void loop() {
+    ArduinoOTA.handle();
   }
 
 private:
-  EspNowConnection* espNow;
-
-  static esp_err_t cmd_handler(httpd_req_t *req) {
-    HttpConnection* self = (HttpConnection*)req->user_ctx;
-    char buf[1024];
-    int len = httpd_req_recv(req, buf, sizeof(buf)-1);
-    if (len <= 0) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "No data received");
-        return ESP_FAIL;
+  void printPartitionInfo() {
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
+    if (running) {
+      Serial.printf("[Partition] Running: %s at 0x%X, size=0x%X\n",
+                    running->label, running->address, running->size);
     }
-    buf[len] = 0;
-    String msg = String(buf);
-    msg.trim();
-
-    Serial.printf("[HTTP] received: %s\n", msg.c_str());
-    if (self && self->espNow) {
-        self->espNow->send(msg);
+    if (next) {
+      Serial.printf("[Partition] Next OTA target: %s at 0x%X, size=0x%X\n",
+                    next->label, next->address, next->size);
     }
-
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
-    return ESP_OK;
   }
 };
 
-//  Global objects 
+
+
+
+
+
+
+
+
 WifiConnection wifi;
 WebCamServer cam;
 EspNowConnection espNow;
 MqttConnection mqtt(&espNow);
-HttpConnection http;
+OtaModule ota;
 
-//  Setup
-void setup() {
-  Serial.begin(115200);
-  wifi.connect();
-  cam.initCamera();
-  cam.startServer();   
-  espNow.init();
-  http.init(&espNow);  
-  mqtt.init();
+String logBuffer = "";
 
-  //  OTA Setup 
-  ArduinoOTA.setHostname("ESP32-CAM");
-  ArduinoOTA.setPassword("1234");
 
-  ArduinoOTA
-    .onStart([]() {
-      String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
-      Serial.println("Start updating " + type);
-    })
-    .onEnd([]() {
-      Serial.println("\nUpdate complete");
-    })
-    .onProgress([](unsigned int progress, unsigned int total) {
-      Serial.printf("Progress: %u%%\n", (progress / (total / 100)));
-    })
-    .onError([](ota_error_t error) {
-      Serial.printf("Error[%u]: ", error);
-      if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-      else if (error == OTA_END_ERROR) Serial.println("End Failed");
-    });
-
-  ArduinoOTA.begin();
-  Serial.println("OTA ready");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
+void addLog(const String& msg) {
+  Serial.println(msg);
+  logBuffer += msg + "\n";
+  if (logBuffer.length() > 4000) {
+    logBuffer.remove(0, logBuffer.length() - 4000);
+  }
 }
+
+
+
+extern "C" int log_vprintf(const char* fmt, va_list args) {
+  char buf[256];
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  logBuffer += String(buf);
+  if (logBuffer.length() > 4000) {
+    logBuffer.remove(0, logBuffer.length() - 4000); 
+  }
+  return vprintf(fmt, args); 
+}
+
+
+
+
+
+void setup() {
+  
+Serial.begin(115200);
+
+
+esp_log_set_vprintf(log_vprintf);
+
+
+
+wifi.connect();
+cam.initCamera();
+cam.startServer();
+espNow.init();
+mqtt.init();
+ota.init();
+
+addLog("Test log to buffer");
+
+
+
+
+}
+
+
 
 
 void loop() {
   mqtt.loop();
-  ArduinoOTA.handle();
-
-  static unsigned long lastPrint = 0;
-  unsigned long now = millis();
-  if (now - lastPrint >= 2000) {
-    Serial.println("da ota thanh cong nha hahaha");
-    lastPrint = now;
+  ota.loop();
+  static unsigned long last = 0;
+  if (millis() - last > 5000) {
+    addLog("Hahuynam vip");
+    last = millis();
   }
 }
