@@ -20,12 +20,9 @@ namespace Giaohangbot
         public PaymentPage(AppService.Product product)
         {
             Title = "Payment";
-            var config = new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .Build();
 
-            service = new AppService(config);
+
+            service = new AppService();
 
             this.product = product;
             startTime = DateTime.Now;

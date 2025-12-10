@@ -151,47 +151,110 @@ public:
 
 //  Motor driver
 class Module_MotorDriver {
+
+
 public:
+
+
   const int ENA = 16, IN1 = 15, IN2 = 7, IN3 = 6, IN4 = 5, ENB = 4;
   const int channelA = 0, channelB = 1, freq = 1000, resolution = 8;
-  int sustainTarget = 50, boostTarget = 90, currentDuty = 0;
+
+  int speed = 255;
+
 
   void init() {
     pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT);
     pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);
     pinMode(ENA, OUTPUT); pinMode(ENB, OUTPUT);
+
+
     ledcSetup(channelA, freq, resolution);
     ledcAttachPin(ENA, channelA);
     ledcSetup(channelB, freq, resolution);
     ledcAttachPin(ENB, channelB);
+
+
     stop();
+
+
     Serial.println("[Driver] init OK");
   }
-  void setSustain(int duty) { duty = constrain(duty, 0, 255); sustainTarget = duty; Serial.printf("[Driver] sustain=%d\n", sustainTarget); }
-  void setBoost(int duty) { duty = constrain(duty, 0, 255); boostTarget = duty; Serial.printf("[Driver] boost=%d\n", boostTarget); }
-  void rampToSpeed(int target) {
-    target = constrain(target, 0, 255);
-    ledcWrite(channelA, target);
-    ledcWrite(channelB, target);
-    currentDuty = target;
+  
+// Forward
+void forward()
+  {
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+
+    digitalWrite(IN3, HIGH);
+    digitalWrite(IN4, LOW);
+
+    ledcWrite(channelA, speed);
+    ledcWrite(channelB, speed);
+
+    Serial.println("[Driver] forward");
   }
-  void drive(int in1, int in2, int in3, int in4) {
-    digitalWrite(IN1, in1); digitalWrite(IN2, in2);
-    digitalWrite(IN3, in3); digitalWrite(IN4, in4);
-    rampToSpeed(boostTarget);
-    delay(200);
-    rampToSpeed(sustainTarget);
+  
+// Backward
+void backward()
+  {
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, HIGH);
+
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, HIGH);
+
+    ledcWrite(channelA, speed);
+    ledcWrite(channelB, speed);
+
+    Serial.println("[Driver] backward");
   }
-  void forward() { drive(HIGH, LOW, HIGH, LOW); Serial.println("[Driver] FORWARD"); }
-  void backward(){ drive(LOW, HIGH, LOW, HIGH); Serial.println("[Driver] BACKWARD"); }
-  void left()    { drive(LOW, HIGH, HIGH, LOW); Serial.println("[Driver] LEFT"); }
-  void right()   { drive(HIGH, LOW, LOW, HIGH); Serial.println("[Driver] RIGHT"); }
-  void stop() {
-    rampToSpeed(0);
-    digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);
-    digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);
-    Serial.println("[Driver] STOP");
+
+// Pivot left
+void left()
+  {
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, HIGH);
+
+    digitalWrite(IN3, HIGH);
+    digitalWrite(IN4, LOW);
+
+    ledcWrite(channelA, speed);
+    ledcWrite(channelB, speed);
+
+    Serial.println("[Driver] left");
   }
+
+// Pivot right
+void right()
+  {
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, HIGH);
+
+    ledcWrite(channelA, speed);
+    ledcWrite(channelB, speed);
+
+    Serial.println("[Driver] right");
+  }
+
+// Stop
+void stop()
+  {
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, LOW);
+
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, LOW);
+
+    ledcWrite(channelA, 0);
+    ledcWrite(channelB, 0);
+
+    Serial.println("[Driver] stop");
+  }
+
 };
 
 //  Buzzer
@@ -225,21 +288,50 @@ public:
   void off(){ digitalWrite(relayPin, LOW);  Serial.println("[Relay] OFF"); }
 };
 
-//  Servo
+// Servo
 class Module_Servo {
 public:
   const int servoPin = 14, channel = 3, freq = 50, resolution = 14;
-  void init() { ledcSetup(channel, freq, resolution); ledcAttachPin(servoPin, channel); off(); Serial.println("[Servo] init OK"); }
+  int currentAngle = 0;   
+
+  void init() {
+    ledcSetup(channel, freq, resolution);
+    ledcAttachPin(servoPin, channel);
+    off();
+    Serial.println("[Servo] init OK");
+  }
+
   void writeAngle(int angle) {
     angle = constrain(angle, 0, 180);
-    int us = map(angle, 0, 180, 500, 2500);
+    int us = map(angle, 0, 180, 500, 2500);  
     int duty = (int)((us * (1 << resolution) * freq) / 1000000);
     ledcWrite(channel, duty);
+    currentAngle = angle;
     Serial.printf("[Servo] angle=%d (duty=%d)\n", angle, duty);
   }
-  void on() { writeAngle(90); }
-  void off(){ writeAngle(0); }
+
+  // Di chuyển chậm dần tới góc mới
+  void smoothWriteAngle(int targetAngle, int step = 1, int delayMs = 20) {
+    targetAngle = constrain(targetAngle, 0, 180);
+    if (targetAngle > currentAngle) {
+      for (int a = currentAngle; a <= targetAngle; a += step) {
+        writeAngle(a);
+        delay(delayMs);
+      }
+    } else {
+      for (int a = currentAngle; a >= targetAngle; a -= step) {
+        writeAngle(a);
+        delay(delayMs);
+      }
+    }
+  }
+
+  void on()  { smoothWriteAngle(0); }   
+  void off() { smoothWriteAngle(120); }    
 };
+
+
+
 
 //  Esp-Now
 class Module_EspNow {
@@ -301,32 +393,21 @@ Module_Mpu6050 mpu;
 
 
 // Command handler
-void onCommand(const String& cmdRaw) {
-  String cmd = cmdRaw;
+
+void onCommand(const String& raw) {
+  String cmd = raw;
   cmd.trim();
 
-  if (cmd.startsWith("sustain=")) {
-    driver.setSustain(cmd.substring(8).toInt());
-  } else if (cmd.startsWith("boost=")) {
-    driver.setBoost(cmd.substring(6).toInt());
-  } else if (cmd == "forward") {
+  if (cmd == "forward") {
     driver.forward();
   } else if (cmd == "backward") {
     driver.backward();
-  } else if (cmd == "pivot_left") {
-    mpu.resetAngle();
-    driver.left();
-    while (!mpu.reached90()) { mpu.updateAngle(); delay(10); }
-    driver.stop();
-    Serial.println("[Driver] Pivot LEFT 90° done");
-  } else if (cmd == "pivot_right") {
-    mpu.resetAngle();
-    driver.right();
-    while (!mpu.reached90()) { mpu.updateAngle(); delay(10); }
-    driver.stop();
-    Serial.println("[Driver] Pivot RIGHT 90° done");
   } else if (cmd == "stop") {
     driver.stop();
+  } else if (cmd == "left") {
+    driver.left();
+  } else if (cmd == "right") {
+    driver.right();
   } else if (cmd == "buzzer_on") {
     buzzer.on();
   } else if (cmd == "buzzer_off") {
@@ -338,9 +419,7 @@ void onCommand(const String& cmdRaw) {
   } else if (cmd == "relay_off") {
     relay.off();
   } else if (cmd.startsWith("emvco=")) {
-    String emvco = cmd.substring(cmd.indexOf('=')+1);
-    emvco.trim();
-    display.showQr(emvco);
+    display.showQr(cmd);
   } else if (cmd == "servo_on") {
     servo.on();
   } else if (cmd == "servo_off") {
@@ -349,10 +428,20 @@ void onCommand(const String& cmdRaw) {
     int angle = cmd.substring(6).toInt();
     servo.writeAngle(angle);
     Serial.printf("[Servo] set angle=%d\n", angle);
-  } else {
+  } 
+  
+  else if (cmd.startsWith("speed=")) { 
+    int val = cmd.substring(6).toInt();
+    driver.speed = constrain(val, 0, 255);
+    Serial.printf("[Driver] speed=%d\n", driver.speed);
+    }
+
+  
+  else {
     Serial.printf("[CMD] Unknown: '%s'\n", cmd.c_str());
   }
 }
+
 
 
 //  Setup
@@ -363,20 +452,9 @@ void setup() {
   buzzer.init();
   relay.init();
   servo.init();
-
   mpu.init();
-  driver.stop();
-  buzzer.off();
-  relay.off();
-  servo.off();
 
   espnow.init(onCommand);
-
-// Đặt tất cả off khi khởi động
-driver.stop();
-buzzer.off(); 
-relay.off();
-servo.off(); 
 }
 // Loop
 void loop() {}

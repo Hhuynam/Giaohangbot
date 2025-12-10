@@ -19,12 +19,9 @@ namespace Giaohangbot
         {
             Title = "Admin Control";
 
-            _config = new ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-                .Build();
 
-            var streamUrl = _config["AdminPage:StreamUrl"];
+            var streamUrl = "http://192.168.0.220/stream";
+
 
             _videoStream = new WebView
             {
@@ -51,7 +48,7 @@ namespace Giaohangbot
             };
 
             // Khởi tạo MQTT service
-            _mqttService = new MqttService(_config);
+            _mqttService = new MqttService();
 
 
             // Các nút điều khiển

@@ -1,6 +1,4 @@
-﻿using Microsoft.Extensions.Configuration;
-
-namespace Giaohangbot;
+﻿namespace Giaohangbot;
 
 public class RegisterPage : ContentPage
 {
@@ -9,19 +7,6 @@ public class RegisterPage : ContentPage
     private Entry _passwordEntry;
     private Button _registerButton;
 
-    // Constructor mặc định cho Shell
-    public RegisterPage()
-    {
-        var config = new ConfigurationBuilder()
-        .SetBasePath(AppContext.BaseDirectory)
-        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-        .Build();
-
-        _appService = new AppService(config);
-        BuildUI();
-    }
-
-    // Constructor có tham số nếu muốn inject AppService
     public RegisterPage(AppService appService)
     {
         _appService = appService;
@@ -60,13 +45,11 @@ public class RegisterPage : ContentPage
             return;
         }
 
-        // Luôn gán role = "User"
         string role = "User";
-
         await _appService.CreateAccountAsync(username, password, role);
         await DisplayAlert("Success", $"Account {username} created with role {role}", "OK");
 
-        // Điều hướng về Auth bằng Shell
-        await Shell.Current.GoToAsync("Auth");
+        // Quay lại AuthPage
+        await Navigation.PopAsync();
     }
 }

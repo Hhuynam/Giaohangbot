@@ -6,7 +6,6 @@ using MQTTnet.Client;
 using MQTTnet.Protocol;
 using Newtonsoft.Json;
 using System.Text;
-using Microsoft.Extensions.Configuration;
 
 public class AppService
 {
@@ -30,38 +29,40 @@ public class AppService
         public DateTime CreatedAt { get; set; }
     }
 
-    private readonly IMongoDatabase _database;
-    private readonly GridFSBucket _imageBucket;
-    private readonly IMongoCollection<Product> _productCollection;
-    private readonly IMongoCollection<Account> _accountCollection;
-    private readonly IConfiguration _config;
+    // Hard-code config values
+    public const string MongoConnectionString =
+        "mongodb://hhn51023_db_user:Namha51023%4001@ac-11ljvhd-shard-00-00.o39loax.mongodb.net:27017," +
+        "ac-11ljvhd-shard-00-01.o39loax.mongodb.net:27017," +
+        "ac-11ljvhd-shard-00-02.o39loax.mongodb.net:27017/?ssl=true&replicaSet=atlas-luprks-shard-0&authSource=admin&retryWrites=true&w=majority";
 
-    public AppService(IConfiguration config)
+    public const string MongoDatabaseName = "giaohangbot";
+    public const string ProductCollectionName = "products_new";
+    public const string AccountCollectionName = "accounts";
+
+    public const string VietQR_AccountNo = "1234567890";
+    public const string VietQR_AccountName = "CONG TY GIAO HANG BOT";
+    public const int VietQR_AcqId = 970436;
+
+    public const string MqttBrokerHost = "broker.hivemq.com";
+    public const int MqttBrokerPort = 1883;
+    public const string MqttClientId = "GiaohangbotApp";
+    public const string MqttTopic = "namha/iot";
+
+
+    public const string AdminStreamUrl = "http://192.168.0.220/stream";
+
+    public readonly IMongoDatabase _database;
+    public readonly GridFSBucket _imageBucket;
+    public readonly IMongoCollection<Product> _productCollection;
+    public readonly IMongoCollection<Account> _accountCollection;
+
+    public AppService()
     {
-        _config = config;
-
-        var connectionString = _config["MongoDB:ConnectionString"];
-        var dbName = _config["MongoDB:DatabaseName"];
-        var client = new MongoClient(connectionString);
-
-        _database = client.GetDatabase(dbName);
+        var client = new MongoClient(MongoConnectionString);
+        _database = client.GetDatabase(MongoDatabaseName);
         _imageBucket = new GridFSBucket(_database);
-        _productCollection = _database.GetCollection<Product>(_config["MongoDB:ProductCollection"]);
-        _accountCollection = _database.GetCollection<Account>(_config["MongoDB:AccountCollection"]);
-    }
-
-    // Factory async method để tạo AppService
-    public static async Task<AppService> CreateAsync()
-    {
-        using var stream = await FileSystem.OpenAppPackageFileAsync("appsettings.json");
-        using var reader = new StreamReader(stream);
-        var json = await reader.ReadToEndAsync();
-
-        var config = new ConfigurationBuilder()
-            .AddJsonStream(new MemoryStream(Encoding.UTF8.GetBytes(json)))
-            .Build();
-
-        return new AppService(config);
+        _productCollection = _database.GetCollection<Product>(ProductCollectionName);
+        _accountCollection = _database.GetCollection<Account>(AccountCollectionName);
     }
 
     public async Task<ObjectId> SaveImageAsync(string filePath)
@@ -77,7 +78,7 @@ public class AppService
         return ms.ToArray();
     }
 
-    private async Task<string> GetNextCargoIdAsync()
+    public async Task<string> GetNextCargoIdAsync()
     {
         var counters = _database.GetCollection<BsonDocument>("counters");
         var filter = Builders<BsonDocument>.Filter.Eq("_id", "CargoCounter");
@@ -123,9 +124,9 @@ public class AppService
         using var client = new HttpClient();
         var payload = new
         {
-            accountNo = _config["VietQR:AccountNo"],
-            accountName = _config["VietQR:AccountName"],
-            acqId = int.Parse(_config["VietQR:AcqId"]),
+            accountNo = VietQR_AccountNo,
+            accountName = VietQR_AccountName,
+            acqId = VietQR_AcqId,
             amount = amount,
             addInfo = cargoId,
             format = "text",
@@ -144,7 +145,7 @@ public class AppService
 
     public async Task PublishOrderToMqttAsync(Product product)
     {
-        var mqtt = new MqttService(_config);
+        var mqtt = new MqttService();
         await mqtt.ConnectAsync();
         string emvco = await GenerateVietQrAsync(product.Cargo_Id, product.Price);
         string payload = $"emvco={emvco}";
@@ -154,7 +155,7 @@ public class AppService
 
     public async Task PublishMqttCommandAsync(string command)
     {
-        var mqtt = new MqttService(_config);
+        var mqtt = new MqttService();
         await mqtt.ConnectAsync();
         await mqtt.PublishAsync(command);
         await mqtt.DisconnectAsync();
@@ -191,23 +192,19 @@ public class AppService
 
 public class MqttService
 {
-    private readonly IMqttClient _client;
-    private readonly MqttClientOptions _options;
-    private readonly IConfiguration _config;
+    public readonly IMqttClient _client;
+    public readonly MqttClientOptions _options;
 
-    public MqttService(IConfiguration config, string clientId = null)
+    public MqttService(string clientId = null)
     {
-        _config = config;
         var factory = new MqttFactory();
         _client = factory.CreateMqttClient();
 
-        var brokerHost = _config["MQTT:BrokerHost"];
-        var brokerPort = int.Parse(_config["MQTT:BrokerPort"]);
-        var cid = clientId ?? _config["MQTT:ClientId"];
+        var cid = clientId ?? AppService.MqttClientId;
 
         _options = new MqttClientOptionsBuilder()
             .WithClientId(cid)
-            .WithTcpServer(brokerHost, brokerPort)
+            .WithTcpServer(AppService.MqttBrokerHost, AppService.MqttBrokerPort)
             .WithCleanSession()
             .Build();
     }
@@ -225,7 +222,7 @@ public class MqttService
         if (!_client.IsConnected)
             await ConnectAsync();
         var mqttMessage = new MqttApplicationMessageBuilder()
-            .WithTopic(_config["MQTT:Topic"])
+            .WithTopic(AppService.MqttTopic)
             .WithPayload(Encoding.UTF8.GetBytes(message))
             .WithQualityOfServiceLevel(MqttQualityOfServiceLevel.ExactlyOnce)
             .WithRetainFlag(false)

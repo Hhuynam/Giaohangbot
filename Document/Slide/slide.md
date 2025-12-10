@@ -144,17 +144,17 @@ style: |
 
 ---
 <div class="Header">1. Giới thiệu đề tài</div>
-<div class="Text1">1.1. Thực tế giao hàng hiện nay</div>
+<div class="Text1">1.1. Giao hàng truyền thống</div>
 <div class="Grid">
 
   <div class="Left">
     <div class="Text1">Nhân viên giao hàng</div>
     <div class="TextBlock"><div class="Text2">Hiện nay, phần lớn đơn hàng thương mại điện tử được giao bởi nhân viên giao hàng truyền thống</div></div>
 
-  <div class="Text1">Ví dụ Shopee Express (SPX)</div>
+  <div class="Text1">Dịch vụ Shopee Express (SPX)</div>
   <div class="TextBlock"><div class="Text2">Nhân viên SPX đảm nhận việc lấy hàng từ kho, di chuyển bằng xe máy và giao trực tiếp đến khách hàng</div></div>
 
-<div class="Text1">Đặc điểm</div>
+<div class="Text1">Đặc điểm của phương thức truyền thống</div>
 <div class="TextBlock"><div class="Text2">Linh hoạt, xử lý nhiều tình huống thực tế</div></div>
 <div class="TextBlock"><div class="Text2">Tốn nhân lực, chi phí vận hành cao</div></div>
 <div class="TextBlock"><div class="Text2">Phụ thuộc vào giao thông và thời tiết</div></div>
@@ -688,6 +688,58 @@ style: |
 </div>
 
 <div class="Page_Number">14</div>
+
+---
+
+<div class="Header">3. Phân tích đề tài</div>
+<div class="Grid">
+
+<div class="Left">
+<div class="Text1">3.1. Phần cứng</div>
+
+<div class="TextBlock">
+<div class="Text2">
+<b>Tổng quan Solenoid 12VDC</b><br>
+- Là cuộn dây điện từ tạo lực hút khi cấp điện<br>
+- Điện áp hoạt động: 12V DC<br>
+- Dòng tiêu thụ: khoảng 0.5A – 1A tùy loại<br>
+- Có lõi sắt di động, khi hút sẽ kéo/thả cơ cấu cơ khí<br>
+- Ứng dụng phổ biến: khóa điện tử, van điện từ, cơ cấu chốt
+</div>
+</div>
+
+<div class="TextBlock">
+<div class="Text2">
+<b>Chức năng chính</b><br>
+- Đóng/mở cơ cấu khóa hoặc chốt hàng<br>
+- Tạo chuyển động tuyến tính đơn giản<br>
+- Kết hợp với relay để điều khiển từ vi điều khiển<br>
+- Có thể bật/tắt nhanh, đáp ứng tốt cho robot giao hàng
+</div>
+</div>
+
+<div class="TextBlock">
+<div class="Text2">
+<b>Ngoại vi & Ứng dụng</b><br>
+- Nối với relay 12VDC (COM, NO) để cấp nguồn<br>
+- Dùng diode chống ngược (flyback diode) bảo vệ mạch<br>
+- Kết hợp với ESP32-S3 để điều khiển qua tín hiệu logic<br>
+- Ứng dụng: mở nắp hộp hàng, khóa an toàn, cơ cấu chốt tự động
+</div>
+</div>
+</div>
+
+<div class="Right">
+<div style="text-align: center;">
+<img src="./image/Solenoid_12VDC.jpg" class="Image" />
+<div class="Caption">Solenoid 12VDC dùng làm cơ cấu khóa/chốt cho robot</div>
+</div>
+</div>
+
+</div>
+
+<div class="Page_Number">17</div>
+
 
 ---
 
@@ -1436,36 +1488,36 @@ style: |
 <div class="Header">4. Quét đơn hàng thành công</div>
 
 <div class="Grid">
-  <div class="Left">
-    <div class="Text1">Minh chứng xác nhận thanh toán</div>
-    <div class="TextBlock">
-      <div class="Text2">
-        Sau khi khách hàng quét mã QR và thanh toán thành công, hệ thống hiển thị xác nhận đơn hàng đã được thanh toán. Cơ cấu mở hatch hàng được kích hoạt tự động.
-      </div>
-    </div>
+<div class="Left">
+<div class="Text1">Minh chứng xác nhận thanh toán</div>
+<div class="TextBlock">
+<div class="Text2">
+Sau khi khách hàng quét mã QR và thanh toán thành công, hệ thống hiển thị xác nhận đơn hàng đã được thanh toán. Cơ cấu mở hatch hàng được kích hoạt tự động.
+</div>
+</div>
 
-  <div class="Text1">Thông điệp hiển thị</div>
-  <div class="TextBlock">
-    <div class="Text2">
-      "Order DH_003 confirmed as paid!<br>
-      Cargo hatch OPENED"
-    </div>
-  </div>
+<div class="Text1">Thông điệp hiển thị</div>
+<div class="TextBlock">
+<div class="Text2">
+"Order DH_003 confirmed as paid!<br>
+Cargo hatch OPENED"
+</div>
+</div>
 
-  <div class="Text1">Ý nghĩa</div>
-  <div class="TextBlock">
-    <div class="Text2">
-      Hệ thống tích hợp giữa phần mềm xác nhận giao dịch và phần cứng điều khiển hatch giúp đảm bảo quy trình giao hàng tự động, an toàn và chính xác.
-    </div>
-  </div>
-  </div>
+<div class="Text1">Ý nghĩa</div>
+<div class="TextBlock">
+<div class="Text2">
+Hệ thống tích hợp giữa phần mềm xác nhận giao dịch và phần cứng điều khiển hatch giúp đảm bảo quy trình giao hàng tự động, an toàn và chính xác.
+</div>
+</div>
+</div>
 
-  <div class="Right">
-    <div style="text-align: center;">
-      <img src="image/Scan_Success.jpg" class="Image" />
-      <div class="Caption">Màn hình xác nhận đơn hàng DH_003 đã thanh toán thành công</div>
-    </div>
-  </div>
+<div class="Right">
+<div style="text-align: center;">
+<img src="image/Scan_Success.jpg" class="Image" />
+<div class="Caption">Màn hình xác nhận đơn hàng DH_003 đã thanh toán thành công</div>
+</div>
+</div>
 </div>
 
 <div class="Page_Number">19</div>

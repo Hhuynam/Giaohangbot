@@ -23,22 +23,18 @@ using Microsoft.Maui.Controls;
             {
                 Title = "Home";
 
-            var config = new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .Build();
 
-            _service = new AppService(config);
+            _service = new AppService();
 
 
             ToolbarItems.Add(new ToolbarItem
                 {
                     Text = "Logout",
-                    Command = new Command(async () =>
-                    {
-                        await Shell.Current.GoToAsync("Auth");
-                    })
-                });
+                Command = new Command(async () =>
+                {
+                    Application.Current.MainPage = new NavigationPage(new AuthPage(new AppService()));
+                })
+            });
 
             _productList = new CollectionView
                 {

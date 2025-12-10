@@ -53,21 +53,12 @@ public class AuthPage : ContentPage
             if (_appService.IsAdmin(account))
             {
                 await DisplayAlert("Login", "Welcome Admin!", "OK");
-
-                // Bật menu Admin trong AppShell
-                (Application.Current.MainPage as AppShell)?.SetAdminVisibility(true);
-
-                // Điều hướng về Home, Admin sẽ hiện trong menu
-                await Shell.Current.GoToAsync("//Home");
+                Application.Current.MainPage = new AppShell(); // vào Shell với menu Admin
             }
             else
             {
                 await DisplayAlert("Login", "Welcome User!", "OK");
-
-                // Ẩn menu Admin nếu không phải admin
-                (Application.Current.MainPage as AppShell)?.SetAdminVisibility(false);
-
-                await Shell.Current.GoToAsync("//Home");
+                Application.Current.MainPage = new AppShell(); // vào Shell với menu User
             }
         }
         else
@@ -76,10 +67,9 @@ public class AuthPage : ContentPage
         }
     }
 
-
     private async void OnRegisterTapped(object sender, EventArgs e)
     {
-        // Điều hướng sang trang đăng ký bằng Shell
-        await Shell.Current.GoToAsync("Register");
+        // Điều hướng trực tiếp sang RegisterPage
+        await Navigation.PushAsync(new RegisterPage(_appService));
     }
 }

@@ -12,12 +12,8 @@ namespace Giaohangbot
         {
             Title = "Người bán";
 
-            var config = new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .Build();
 
-            _service = new AppService(config);
+            _service = new AppService();
 
             var nameEntry = new Entry { Placeholder = "Tên sản phẩm" };
             var priceEntry = new Entry { Placeholder = "Giá sản phẩm", Keyboard = Keyboard.Numeric };
